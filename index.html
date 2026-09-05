@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenKey — Multi-Model Chat for NVIDIA NIM</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230b120c'/><rect x='5' y='5' width='10' height='10' fill='%2376b900'/><rect x='17' y='5' width='10' height='10' fill='%2376b900' opacity='.4'/><rect x='5' y='17' width='10' height='10' fill='%2376b900' opacity='.4'/><rect x='17' y='17' width='10' height='10' fill='%2376b900'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#060a07; --bg1:#0a100b;
+  --panel:#0e1610; --panel2:#121c13; --ink:#0a120b;
+  --line:#20301f; --line2:#2c4028;
+  --green:#76b900; --green-hi:#9bec3a; --green-dim:rgba(118,185,0,.14);
+  --amber:#ffb454; --red:#ff5d5d; --cyan:#5fd4c4;
+  --text:#dce8dc; --muted:#7f9180; --faint:#54654f;
+  --disp:'Syne',sans-serif; --body:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg0); color:var(--text);
+  font:15px/1.55 var(--body);
+  overflow:hidden;
+}
+::selection{background:var(--green);color:#08120a}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border:2px solid var(--bg0);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:var(--green)}
+
+/* ===== fundo em camadas ===== */
+#fx{position:fixed;inset:0;z-index:0;pointer-events:none}
+.bg-grid{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(118,185,0,.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(118,185,0,.055) 1px,transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(ellipse 90% 80% at 28% 12%,#000 0%,transparent 78%);
+          mask-image:radial-gradient(ellipse 90% 80% at 28% 12%,#000 0%,transparent 78%);
+}
+.bg-glow{
+  position:fixed;z-index:0;pointer-events:none;border-radius:50%;filter:blur(90px);opacity:.5;
+}
+.bg-glow.g1{width:520px;height:520px;left:-160px;top:-180px;background:radial-gradient(circle,rgba(118,185,0,.22),transparent 65%)}
+.bg-glow.g2{width:420px;height:420px;right:-120px;bottom:-140px;background:radial-gradient(circle,rgba(95,212,196,.10),transparent 65%)}
+
+/* ===== shell ===== */
+.shell{position:relative;z-index:2;display:grid;grid-template-columns:322px 1fr;height:100dvh}
+
+/* ===== sidebar ===== */
+aside{
+  background:linear-gradient(180deg,var(--panel) 0%,var(--bg1) 100%);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:14px;
+  padding:18px 16px;overflow-y:auto;
+}
+.brand{display:flex;align-items:center;gap:12px;padding:2px 2px 14px;border-bottom:1px solid var(--line)}
+.logo{display:grid;grid-template-columns:repeat(2,11px);grid-template-rows:repeat(2,11px);gap:3px;flex:none}
+.logo i{background:var(--green);opacity:.35}
+.logo i:nth-child(1){opacity:1}
+.logo i:nth-child(4){opacity:1;animation:cell 2.4s infinite}
+@keyframes cell{0%,100%{opacity:1}50%{opacity:.25}}
+.brand h1{font:800 19px/1 var(--disp);letter-spacing:.02em}
+.brand h1 em{font-style:normal;color:var(--green)}
+.brand small{display:block;font:400 10.5px var(--mono);color:var(--muted);margin-top:4px;letter-spacing:.08em;text-transform:uppercase}
+
+.card{
+  background:var(--panel);border:1px solid var(--line);
+  padding:14px;position:relative;flex:none;
+}
+.card::before{content:'';position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-top:2px solid var(--green);border-left:2px solid var(--green)}
+.card h2{
+  font:500 10.5px var(--mono);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:11px;
+}
+.card h2 b{color:var(--green);font-weight:500}
+
+label{display:block;font:400 12px var(--body);color:var(--muted);margin:10px 0 5px}
+label span{color:var(--faint);font-family:var(--mono);font-size:11px}
+
+input[type=text],input[type=password],input[type=number],textarea,select{
+  width:100%;background:var(--ink);border:1px solid var(--line);
+  color:var(--text);font:14px var(--mono);padding:9px 11px;
+  outline:none;transition:border-color .18s, box-shadow .18s;
+}
+input:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim)}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:3px;background:var(--line2);outline:none;margin:8px 0 2px;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:15px;height:15px;background:var(--green);
+  border:2px solid var(--bg0);box-shadow:0 0 10px rgba(118,185,0,.6);cursor:grab;
+}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;background:var(--green);border:2px solid var(--bg0);border-radius:0}
+
+.row{display:flex;gap:8px;margin-top:10px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  border:none;cursor:pointer;font:600 13px var(--body);
+  padding:9px 14px;transition:transform .15s, box-shadow .2s, background .2s, border-color .2s, color .2s;
+  user-select:none;
+}
+.btn:active{transform:translateY(1px) scale(.99)}
+.btn-p{background:var(--green);color:#0a1408;flex:1}
+.btn-p:hover{background:var(--green-hi);transform:translateY(-1px);box-shadow:0 8px 26px rgba(118,185,0,.35)}
+.btn-g{background:transparent;border:1px solid var(--line2);color:var(--text)}
+.btn-g:hover{border-color:var(--green);color:var(--green-hi)}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  font:500 11px var(--mono);padding:3px 9px;border:1px solid var(--line2);
+  color:var(--muted);margin-top:9px;letter-spacing:.04em;
+}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.pill.busy{color:var(--amber);border-color:rgba(255,180,84,.4)}.pill.busy i{background:var(--amber);animation:pulse 1s infinite}
+.pill.ok{color:var(--green-hi);border-color:rgba(118,185,0,.45)}.pill.ok i{background:var(--green);box-shadow:0 0 8px var(--green)}
+.pill.err{color:var(--red);border-color:rgba(255,93,93,.4)}.pill.err i{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hint{font:400 11px var(--body);color:var(--faint);margin-top:8px;line-height:1.5}
+
+/* model selector */
+#modelBtn{
+  width:100%;background:var(--ink);border:1px solid var(--line);color:var(--text);
+  font:13px var(--mono);padding:10px 11px;cursor:pointer;text-align:left;
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  transition:border-color .18s;
+}
+#modelBtn:hover{border-color:var(--green)}
+#modelBtn .caret{color:var(--green);transition:transform .2s;flex:none}
+#modelWrap.open #modelBtn{border-color:var(--green)}
+#modelWrap.open .caret{transform:rotate(180deg)}
+#modelBtnLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#modelPanel{
+  display:none;margin-top:6px;background:var(--panel2);border:1px solid var(--line2);
+  box-shadow:0 18px 44px rgba(0,0,0,.55);position:relative;z-index:30;
+}
+#modelWrap.open #modelPanel{display:block;animation:drop .18s ease}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}}
+#modelPanel .pbody{padding:10px}
+#modelList{max-height:300px;overflow-y:auto;margin-top:8px}
+.mgroup{font:500 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--green);padding:9px 8px 4px;border-bottom:1px solid var(--line)}
+.mitem{padding:7px 9px;cursor:pointer;border-left:2px solid transparent;transition:background .12s,border-color .12s}
+.mitem:hover{background:var(--green-dim);border-left-color:var(--green)}
+.mitem.sel{background:var(--green-dim);border-left-color:var(--green)}
+.mitem .nm{font:500 13px var(--mono);color:var(--text);word-break:break-all}
+.mitem .fid{font:400 10.5px var(--mono);color:var(--faint);word-break:break-all}
+.mitem.sel .nm::after{content:' ✓';color:var(--green)}
+.mcount{font:400 11px var(--mono);color:var(--muted);margin-top:7px;display:flex;justify-content:space-between;align-items:center}
+.check{display:flex;align-items:center;gap:6px;font:400 11px var(--body);color:var(--muted);cursor:pointer}
+.check input{accent-color:var(--green)}
+
+/* ===== main ===== */
+main{display:flex;flex-direction:column;height:100dvh;min-width:0;position:relative}
+header{
+  flex:none;display:flex;align-items:center;gap:12px;
+  padding:0 18px;height:58px;border-bottom:1px solid var(--line);
+  background:rgba(10,16,11,.72);backdrop-filter:blur(10px);z-index:5;
+}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:none;transition:background .3s}
+.dot.ok{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 2.2s infinite}
+.dot.busy{background:var(--amber);box-shadow:0 0 10px var(--amber);animation:pulse .8s infinite}
+.dot.err{background:var(--red)}
+#modelChip{font:500 13px var(--mono);color:var(--green-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46vw}
+#modelMeta{font:400 11px var(--mono);color:var(--faint);white-space:nowrap}
+header .sp{flex:1}
+.ibtn{
+  width:36px;height:36px;display:grid;place-items:center;flex:none;
+  background:transparent;border:1px solid var(--line2);color:var(--muted);cursor:pointer;
+  transition:all .18s;
+}
+.ibtn:hover{border-color:var(--green);color:var(--green-hi);transform:translateY(-1px);box-shadow:0 5px 16px rgba(118,185,0,.2)}
+.ibtn.warn:hover{border-color:var(--red);color:var(--red);box-shadow:0 5px 16px rgba(255,93,93,.2)}
+.ibtn.hidden{display:none}
+#menuBtn{display:none}
+
+/* mensagens */
+#scroller{flex:1;overflow-y:auto;scroll-behavior:smooth}
+#messages{max-width:880px;margin:0 auto;padding:26px 22px 30px;display:flex;flex-direction:column;gap:14px}
+
+.msg{
+  display:flex;gap:13px;padding:15px 17px;border:1px solid var(--line);
+  background:rgba(14,22,16,.72);
+  animation:msgin .38s cubic-bezier(.2,.8,.3,1) both;
+  position:relative;transition:border-color .2s;
+}
+@keyframes msgin{from{opacity:0;transform:translateY(10px)}}
+.msg:hover{border-color:var(--line2)}
+.msg.user{border-color:rgba(118,185,0,.3);background:linear-gradient(90deg,rgba(118,185,0,.08),rgba(118,185,0,.02) 60%,rgba(14,22,16,.72))}
+.msg.system{border-color:rgba(255,180,84,.35);background:rgba(255,180,84,.05)}
+.msg.system .md{color:var(--amber);font:400 13px var(--mono)}
+.ava{
+  width:34px;height:34px;flex:none;display:grid;place-items:center;
+  border:1px solid var(--line2);background:var(--panel2);
+  font:700 14px var(--mono);
+}
+.msg.user .ava{color:var(--green-hi);border-color:rgba(118,185,0,.5)}
+.msg.assistant .ava{color:var(--bg0);background:var(--green);border-color:var(--green)}
+.msg.system .ava{color:var(--amber);border-color:rgba(255,180,84,.5)}
+.mbody{flex:1;min-width:0}
+.mhead{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.mrole{font:500 10.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.msg.user .mrole{color:var(--green-hi)}
+.mmeta{font:400 10.5px var(--mono);color:var(--faint);margin-left:auto;white-space:nowrap}
+.mcopy{opacity:0;background:none;border:none;color:var(--faint);cursor:pointer;font:400 10.5px var(--mono);transition:opacity .15s,color .15s;padding:0}
+.msg:hover .mcopy{opacity:1}
+.mcopy:hover{color:var(--green-hi)}
+
+/* markdown */
+.md{overflow-wrap:break-word}
+.md p{margin:0 0 10px}.md p:last-child{margin-bottom:0}
+.md h1,.md h2,.md h3,.md h4{font-family:var(--disp);margin:14px 0 8px;line-height:1.25}
+.md h1{font-size:21px}.md h2{font-size:18px}.md h3{font-size:16px}.md h4{font-size:14px}
+.md ul,.md ol{margin:6px 0 10px 22px}
+.md li{margin:3px 0}
+.md a{color:var(--cyan);text-decoration:underline;text-underline-offset:2px}
+.md blockquote{border-left:3px solid var(--green);padding:4px 12px;margin:8px 0;color:var(--muted);background:rgba(118,185,0,.05)}
+.md hr{border:none;border-top:1px solid var(--line2);margin:12px 0}
+.md code{font:13px var(--mono);background:#08120a;border:1px solid var(--line);padding:1.5px 6px;color:var(--green-hi)}
+.codebox{margin:10px 0;border:1px solid var(--line2);background:#070d08}
+.codebox .cbar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 11px;background:var(--panel2);border-bottom:1px solid var(--line);
+  font:400 10.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+}
+.codebox .cbar button{background:none;border:none;color:var(--muted);cursor:pointer;font:400 11px var(--mono);transition:color .15s}
+.codebox .cbar button:hover{color:var(--green-hi)}
+.codebox pre{padding:12px 14px;overflow-x:auto}
+.codebox pre code{background:none;border:none;padding:0;color:#c8e6b0;font:13px/1.6 var(--mono)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--green);vertical-align:-2px;margin-left:2px;animation:blink .8s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.dots{display:inline-flex;gap:5px;padding:4px 0}
+.dots i{width:7px;height:7px;background:var(--green);animation:djump 1.1s infinite}
+.dots i:nth-child(2){animation-delay:.18s}.dots i:nth-child(3){animation-delay:.36s}
+@keyframes djump{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+/* boot / boas-vindas */
+#boot{max-width:660px;margin:6vh auto 0;padding:0 22px;text-align:left}
+#boot .big{font:800 clamp(34px,5vw,52px)/1.02 var(--disp);letter-spacing:-.01em}
+#boot .big em{font-style:normal;color:var(--green);text-shadow:0 0 34px rgba(118,185,0,.45)}
+#boot .sub{font:400 13px var(--mono);color:var(--muted);margin:12px 0 26px;letter-spacing:.05em}
+#bootLog{
+  background:rgba(7,13,8,.85);border:1px solid var(--line);border-left:3px solid var(--green);
+  padding:16px 18px;font:13px/1.9 var(--mono);min-height:130px;
+}
+#bootLog .l{animation:msgin .3s both;white-space:pre-wrap;word-break:break-word}
+.lok{color:var(--green-hi)}.lrun{color:var(--amber)}.lerr{color:var(--red)}.ldim{color:var(--faint)}
+#boot .row{margin-top:16px}
+.caretline{color:var(--green)}
+.caretline::after{content:'▮';animation:blink .8s steps(1) infinite}
+
+#welcome{display:none;max-width:760px;margin:4vh auto 0;padding:0 22px;animation:msgin .5s both}
+#welcome h2{font:800 clamp(28px,4vw,42px)/1.05 var(--disp)}
+#welcome h2 em{font-style:normal;color:var(--green)}
+#welcome p{color:var(--muted);margin:10px 0 20px;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:9px}
+.chip{
+  background:var(--panel);border:1px solid var(--line2);color:var(--text);
+  font:400 13px var(--body);padding:9px 13px;cursor:pointer;text-align:left;
+  transition:all .18s;max-width:340px;
+}
+.chip:hover{border-color:var(--green);color:var(--green-hi);transform:translateY(-2px);box-shadow:0 8px 20px rgba(118,185,0,.15)}
+.chip b{display:block;font:500 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:3px}
+
+/* composer */
+#composer{flex:none;border-top:1px solid var(--line);background:rgba(10,16,11,.85);backdrop-filter:blur(10px);padding:13px 18px 15px}
+#composerInner{
+  max-width:880px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line2);transition:border-color .2s, box-shadow .2s;
+  clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%);
+}
+#composerInner:focus-within{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim)}
+#input{
+  width:100%;background:transparent;border:none;resize:none;
+  font:15px/1.5 var(--body);color:var(--text);padding:13px 15px 6px;
+  max-height:170px;outline:none;
+}
+.crow{display:flex;align-items:center;gap:10px;padding:7px 10px 10px 15px}
+.crow .khint{font:400 10.5px var(--mono);color:var(--faint)}
+.crow .khint b{color:var(--muted);font-weight:500}
+.crow .sp{flex:1}
+#charCount{font:400 11px var(--mono);color:var(--faint)}
+.send{
+  width:42px;height:38px;display:grid;place-items:center;border:none;cursor:pointer;
+  background:var(--green);color:#0a1408;transition:all .18s;flex:none;
+}
+.send:hover{background:var(--green-hi);box-shadow:0 6px 20px rgba(118,185,0,.4);transform:translateY(-1px)}
+.send:disabled{opacity:.3;cursor:not-allowed;box-shadow:none;transform:none}
+.send.stop{background:var(--amber)}
+.send.stop:hover{box-shadow:0 6px 20px rgba(255,180,84,.4)}
+
+#backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:39}
+
+@media (max-width:920px){
+  .shell{grid-template-columns:1fr}
+  aside{position:fixed;left:0;top:0;bottom:0;width:300px;z-index:40;transform:translateX(-102%);transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+  body.sb-open aside{transform:translateX(0);box-shadow:24px 0 60px rgba(0,0,0,.5)}
+  body.sb-open #backdrop{display:block}
+  #menuBtn{display:grid}
+  #modelChip{max-width:34vw}
+  #modelMeta{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<canvas id="fx"></canvas>
+<div class="bg-grid"></div>
+<div class="bg-glow g1"></div>
+<div class="bg-glow g2"></div>
+<div id="backdrop"></div>
+
+<div class="shell">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div>
+        <h1>OPEN<em>KEY</em></h1>
+        <small>multi-model chat · nvidia nim</small>
+      </div>
+    </div>
+
+    <!-- api key -->
+    <section class="card">
+      <h2><b>//</b> api key</h2>
+      <input type="password" id="keyInput" placeholder="nvapi-••••••••••••" autocomplete="off" spellcheck="false">
+      <div class="row">
+        <button class="btn btn-p" id="connectBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          Connect
+        </button>
+      </div>
+      <div class="pill" id="keyStatus"><i></i><span>no key</span></div>
+      <p class="hint">Your key is stored only in this browser (localStorage). Generate one at <b>build.nvidia.com</b>.</p>
+    </section>
+
+    <!-- model -->
+    <section class="card" id="modelWrap">
+      <h2><b>//</b> model <span id="modelCount" style="float:right;color:var(--faint);letter-spacing:0;text-transform:none"></span></h2>
+      <button id="modelBtn" disabled>
+        <span id="modelBtnLabel">connect to list models…</span>
+        <svg class="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="modelPanel">
+        <div class="pbody">
+          <input type="text" id="modelSearch" placeholder="search models…" autocomplete="off">
+          <label class="check" style="margin-top:9px"><input type="checkbox" id="showAll"> include image/audio/embedding models</label>
+          <div id="modelList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- parâmetros -->
+    <section class="card">
+      <h2><b>//</b> parameters</h2>
+      <label>temperature <span id="tempVal">0.70</span></label>
+      <input type="range" id="temp" min="0" max="2" step="0.05" value="0.7">
+      <label>max output tokens</label>
+      <input type="number" id="maxTok" min="64" max="8192" step="64" value="1024">
+      <label>system prompt</label>
+      <textarea id="sysPrompt" rows="3" style="font:13px/1.5 var(--body);resize:vertical">You are a helpful, concise assistant. Reply in the same language the user writes in.</textarea>
+    </section>
+
+    <p class="hint" style="margin-top:auto;padding:4px 2px 0">100% client-side · requests go only to <b style="color:var(--muted)">integrate.api.nvidia.com</b></p>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main>
+    <header>
+      <button class="ibtn" id="menuBtn" title="menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <span class="dot" id="statusDot"></span>
+      <span id="modelChip">no model</span>
+      <span id="modelMeta"></span>
+      <span class="sp"></span>
+      <button class="ibtn" id="regenBtn" title="regenerate last response" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>
+      </button>
+      <button class="ibtn" id="exportBtn" title="export conversation (.md)" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+      </button>
+      <button class="ibtn warn" id="clearBtn" title="clear conversation" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13"/></svg>
+      </button>
+    </header>
+
+    <div id="scroller">
+      <!-- tela de boot -->
+      <div id="boot">
+        <div class="big">OPENKEY<br><em>ONE KEY.</em> EVERY MODEL.</div>
+        <p class="sub">chat/completions · SSE streaming · full catalog via /v1/models</p>
+        <div id="bootLog"></div>
+        <div class="row"><button class="btn btn-g" id="focusKeyBtn">→ enter your api key</button></div>
+      </div>
+
+      <!-- post-connection welcome -->
+      <div id="welcome">
+        <h2>models <em>loaded.</em></h2>
+        <p id="welcomeSub">Pick a model or just start typing.</p>
+        <div class="chips">
+          <button class="chip"><b>explain</b>What is CUDA and why did it make GPUs so powerful?</button>
+          <button class="chip"><b>code</b>Write a Python function that sorts files in a folder by size</button>
+          <button class="chip"><b>summarize</b>Summarize the history of GPUs in 5 short milestones</button>
+          <button class="chip"><b>plan</b>Create an 8-week machine learning study plan</button>
+        </div>
+      </div>
+
+      <div id="messages"></div>
+    </div>
+
+    <div id="composer">
+      <div id="composerInner">
+        <textarea id="input" rows="1" placeholder="Message the model…" disabled></textarea>
+        <div class="crow">
+          <span class="khint"><b>Enter</b> to send · <b>Shift+Enter</b> for a new line</span>
+          <span class="sp"></span>
+          <span id="charCount"></span>
+          <button class="send" id="sendBtn" disabled title="send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   OpenKey — multi-model chat for the NVIDIA NIM API
+   endpoint: https://integrate.api.nvidia.com/v1  (OpenAI-compatible)
+   ============================================================ */
+const API = 'https://integrate.api.nvidia.com/v1';
+const $ = id => document.getElementById(id);
+
+const NO_TEXT = /(embed|rerank|rank[-.]|retriev|sdxl|diffus|imagen|flux|image|photo|paint|whisper|speech|tts|audio|asr\b|video|motion|cosmos|ocr|segme|depth|pose|avatar|face|upscale|inpaint|vision|vlm|llava|pixtral|moondream|paligemma|internvl|got-|music|midi|point|robotic|gr00t|isaac)/i;
+const PREF = ['meta/llama-3.3-70b-instruct','nvidia/llama-3.1-nemotron-70b-instruct','deepseek-ai/deepseek-r1','meta/llama-3.1-8b-instruct','mistralai/mistral-7b-instruct-v0.3'];
+
+const state = {
+  key: localStorage.getItem('nv_key') || '',
+  models: [],
+  sel: localStorage.getItem('nv_model') || '',
+  hist: [],          // [{role, content}]
+  busy: false,
+  ctrl: null,
+  connected: false
+};
+
+/* ---------- utilidades ---------- */
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function setStatus(cls, txt){
+  const p = $('keyStatus');
+  p.className = 'pill ' + cls;
+  p.querySelector('span').textContent = txt;
+  const d = $('statusDot');
+  d.className = 'dot ' + (cls==='ok'?'ok':cls==='busy'?'busy':cls==='err'?'err':'');
+}
+function bootLog(txt, cls='ldim'){
+  const l = document.createElement('div');
+  l.className = 'l ' + cls;
+  l.textContent = txt;
+  $('bootLog').appendChild(l);
+  $('bootLog').parentElement && ($('scroller').scrollTop = 0);
+}
+function saveSettings(){
+  localStorage.setItem('nv_temp', $('temp').value);
+  localStorage.setItem('nv_maxtok', $('maxTok').value);
+  localStorage.setItem('nv_sys', $('sysPrompt').value);
+}
+
+/* ---------- markdown leve ---------- */
+function inlineMd(s){
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function renderMd(src){
+  const blocks = [];
+  let text = esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+    blocks.push(`<div class="codebox"><div class="cbar"><span>${lang||'code'}</span><button data-code="${blocks.length}">copy</button></div><pre><code>${code.replace(/\n$/,'')}</code></pre></div>`);
+    return '\x00' + (blocks.length-1) + '\x00';
+  });
+  const lines = text.split('\n');
+  let out = [], p = [], list = null;
+  const flushP = () => { if(p.length){ out.push('<p>'+inlineMd(p.join(' '))+'</p>'); p=[]; } };
+  const flushL = () => { if(list){ out.push('<'+list.t+'>'+list.items.map(i=>'<li>'+inlineMd(i)+'</li>').join('')+'</'+list.t+'>'); list=null; } };
+  for(const raw of lines){
+    const line = raw.replace(/\s+$/,'');
+    let m;
+    if(/^\x00\d+\x00$/.test(line.trim())){ flushP(); flushL(); out.push(line.trim()); continue; }
+    if(!line.trim()){ flushP(); flushL(); continue; }
+    if(m = line.match(/^(#{1,4})\s+(.*)/)){ flushP(); flushL(); const n=m[1].length; out.push(`<h${n}>${inlineMd(m[2])}</h${n}>`); continue; }
+    if(/^(-{3,}|\*{3,})$/.test(line.trim())){ flushP(); flushL(); out.push('<hr>'); continue; }
+    if(m = line.match(/^&gt;\s?(.*)/)){ flushP(); flushL(); out.push('<blockquote>'+inlineMd(m[1])+'</blockquote>'); continue; }
+    if(m = line.match(/^\s*[-*]\s+(.*)/)){ flushP(); if(!list||list.t!=='ul'){flushL(); list={t:'ul',items:[]};} list.items.push(m[1]); continue; }
+    if(m = line.match(/^\s*\d+[.)]\s+(.*)/)){ flushP(); if(!list||list.t!=='ol'){flushL(); list={t:'ol',items:[]};} list.items.push(m[1]); continue; }
+    flushL(); p.push(line.trim());
+  }
+  flushP(); flushL();
+  let html = out.join('');
+  html = html.replace(/\x00(\d+)\x00/g, (m,i)=>blocks[+i]);
+  return html;
+}
+
+/* ---------- mensagens ---------- */
+const NAMES = { user:'you', assistant:'model', system:'system' };
+
+function addMessage(role, content, meta=''){
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  const avaChar = role==='user' ? 'U' : role==='assistant' ? '◈' : '!';
+  el.innerHTML = `
+    <div class="ava">${avaChar}</div>
+    <div class="mbody">
+      <div class="mhead">
+        <span class="mrole">${NAMES[role]}</span>
+        ${role==='assistant' && state.sel ? `<span class="mrole" style="color:var(--faint)">${esc(state.sel)}</span>`:''}
+        <span class="mmeta">${meta}</span>
+        <button class="mcopy">copy</button>
+      </div>
+      <div class="md"></div>
+    </div>`;
+  const md = el.querySelector('.md');
+  if(role==='assistant') md.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
+  else md.innerHTML = renderMd(content);
+  el.dataset.raw = content || '';
+  $('messages').appendChild(el);
+  scrollBottom();
+  return el;
+}
+function setMd(el, text, streaming){
+  el.dataset.raw = text;
+  el.querySelector('.md').innerHTML = renderMd(text) + (streaming ? '<span class="cursor"></span>' : '');
+}
+function scrollBottom(){
+  const s = $('scroller');
+  s.scrollTop = s.scrollHeight;
+}
+
+/* ---------- model catalog ---------- */
+async function connect(){
+  const key = $('keyInput').value.trim();
+  if(!key){ setStatus('err','enter a key'); $('keyInput').focus(); return; }
+  if(!/^nvapi-/.test(key)) bootLog('[ !! ] key does not start with "nvapi-" — trying anyway','lrun');
+  setStatus('busy','authenticating…');
+  bootLog('[ .. ] authenticating with integrate.api.nvidia.com …','lrun');
+  try{
+    const res = await fetch(API + '/models', { headers:{ 'Authorization':'Bearer '+key, 'Accept':'application/json' }});
+    if(res.status===401||res.status===403){ throw new Error('key rejected (401) — check that it is complete'); }
+    if(!res.ok){ throw new Error('HTTP '+res.status+' while listing models'); }
+    const data = await res.json();
+    state.models = (data.data||[]).map(m=>m.id).filter(id=>typeof id==='string').sort();
+    if(!state.models.length) throw new Error('empty catalog returned by the API');
+    state.key = key;
+    localStorage.setItem('nv_key', key);
+    state.connected = true;
+
+    const nText = state.models.filter(id=>!NO_TEXT.test(id)).length;
+    bootLog(`[ ok ] authenticated — ${state.models.length} models in catalog (${nText} text)`, 'lok');
+
+    if(!state.sel || !state.models.includes(state.sel)){
+      state.sel = PREF.find(p=>state.models.includes(p)) || state.models.find(id=>!NO_TEXT.test(id)) || state.models[0];
+    }
+    renderModels();
+    updateModelUI();
+    setStatus('ok','connected');
+    setTimeout(enterChat, 650);
+  }catch(err){
+    setStatus('err','connection failed');
+    if(err instanceof TypeError){
+      bootLog('[ !! ] network/CORS error — your browser blocked the direct call.','lerr');
+      bootLog('     tip: serve the file from a local server or try another browser.','lerr');
+    }else{
+      bootLog('[ !! ] ' + err.message, 'lerr');
+    }
+  }
+}
+
+function textModels(){
+  return $('showAll').checked ? state.models : state.models.filter(id=>!NO_TEXT.test(id));
+}
+function renderModels(){
+  const q = $('modelSearch').value.trim().toLowerCase();
+  const list = textModels().filter(id=>!q || id.toLowerCase().includes(q));
+  const groups = {};
+  list.forEach(id=>{
+    const g = id.includes('/') ? id.split('/')[0] : 'outros';
+    (groups[g] = groups[g]||[]).push(id);
+  });
+  let html = '';
+  Object.keys(groups).sort().forEach(g=>{
+    html += `<div class="mgroup">${esc(g)} · ${groups[g].length}</div>`;
+    groups[g].forEach(id=>{
+      const nm = id.includes('/') ? id.split('/').slice(1).join('/') : id;
+      html += `<div class="mitem ${id===state.sel?'sel':''}" data-id="${esc(id)}">
+        <div class="nm">${esc(nm)}</div><div class="fid">${esc(id)}</div></div>`;
+    });
+  });
+  $('modelList').innerHTML = html || '<div style="padding:14px;color:var(--faint);font:13px var(--mono)">no matches</div>';
+  $('modelCount').textContent = state.connected ? textModels().length + ' avail.' : '';
+}
+function updateModelUI(){
+  $('modelBtnLabel').textContent = state.sel || '—';
+  $('modelChip').textContent = state.sel || 'no model';
+  $('modelMeta').textContent = state.connected ? '· ' + textModels().length + ' text models' : '';
+  $('modelBtn').disabled = !state.connected;
+  $('welcomeSub').textContent = `Chatting via ${state.sel}. Switch models anytime in the sidebar.`;
+}
+
+/* ---------- entrar no chat ---------- */
+function enterChat(){
+  $('boot').style.display = 'none';
+  $('welcome').style.display = 'block';
+  $('input').disabled = false;
+  $('sendBtn').disabled = false;
+  ['clearBtn','exportBtn'].forEach(id=>$(id).disabled = false);
+  $('input').focus();
+}
+
+/* ---------- envio + streaming ---------- */
+async function send(){
+  const text = $('input').value.trim();
+  if(!text || state.busy || !state.connected) return;
+  $('welcome').style.display = 'none';
+  addMessage('user', text);
+  state.hist.push({role:'user', content:text});
+  $('input').value = ''; autoGrow(); updateCount();
+  await stream();
+}
+
+async function stream(){
+  if(!state.sel){ addMessage('system','no model selected — pick one in the sidebar.'); return; }
+  state.busy = true;
+  state.ctrl = new AbortController();
+  setComposerBusy(true);
+
+  const msgs = [];
+  const sys = $('sysPrompt').value.trim();
+  if(sys) msgs.push({role:'system', content:sys});
+  msgs.push(...state.hist);
+
+  const el = addMessage('assistant','');
+  const t0 = performance.now();
+  let ttf = null, full = '', usage = null;
+
+  try{
+    const res = await fetch(API + '/chat/completions', {
+      method:'POST',
+      headers:{
+        'Authorization':'Bearer '+state.key,
+        'Content-Type':'application/json',
+        'Accept':'text/event-stream'
+      },
+      body: JSON.stringify({
+        model: state.sel,
+        messages: msgs,
+        temperature: parseFloat($('temp').value),
+        top_p: 0.95,
+        max_tokens: Math.max(64, parseInt($('maxTok').value)||1024),
+        stream: true,
+        stream_options: { include_usage: true }
+      }),
+      signal: state.ctrl.signal
+    });
+
+    if(!res.ok){
+      let msg = 'HTTP ' + res.status;
+      try{ const d = await res.json(); msg = d.error?.message || d.detail || msg; }catch(_){}
+      throw new Error(msg);
+    }
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', rafPending = false;
+
+    const paint = () => { rafPending = false; setMd(el, full, true); scrollBottom(); };
+
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for(const line of lines){
+        const t = line.trim();
+        if(!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if(payload === '[DONE]') continue;
+        let j; try{ j = JSON.parse(payload); }catch(_){ continue; }
+        if(j.error) throw new Error(j.error.message || 'error returned by the model');
+        if(j.usage) usage = j.usage;
+        const delta = j.choices?.[0]?.delta?.content;
+        if(delta){
+          if(ttf===null) ttf = performance.now() - t0;
+          full += delta;
+          if(!rafPending){ rafPending = true; requestAnimationFrame(paint); }
+        }
+      }
+    }
+
+    const total = ((performance.now()-t0)/1000).toFixed(1);
+    const toks = usage?.completion_tokens ?? Math.round(full.length/4);
+    const meta = `${ttf!==null?Math.round(ttf)+'ms · ':''}${total}s · ~${toks} tok`;
+    setMd(el, full, false);
+    el.querySelector('.mmeta').textContent = meta;
+    if(full.trim()) state.hist.push({role:'assistant', content:full});
+    else el.remove();
+
+  }catch(err){
+    if(err.name === 'AbortError'){
+      if(full){ setMd(el, full + '\n\n_· interrupted ·_', false); state.hist.push({role:'assistant',content:full}); }
+      else el.remove();
+    }else{
+      el.remove();
+      addMessage('system', 'generation failed: ' + err.message);
+    }
+  }finally{
+    state.busy = false;
+    state.ctrl = null;
+    setComposerBusy(false);
+    $('regenBtn').disabled = !state.hist.some(m=>m.role==='assistant');
+  }
+}
+
+function setComposerBusy(busy){
+  const b = $('sendBtn');
+  b.classList.toggle('stop', busy);
+  b.title = busy ? 'stop generation' : 'send';
+  b.innerHTML = busy
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+  b.disabled = !busy && !state.connected;
+  $('input').disabled = busy;
+  if(!busy) $('input').focus();
+}
+
+/* ---------- actions ---------- */
+function clearChat(){
+  if(state.busy) state.ctrl?.abort();
+  state.hist = [];
+  $('messages').innerHTML = '';
+  $('welcome').style.display = state.connected ? 'block' : 'none';
+  $('regenBtn').disabled = true;
+}
+function exportChat(){
+  if(!state.hist.length) return;
+  let md = `# Conversation — ${state.sel}\n_${new Date().toLocaleString('en-US')}_\n\n`;
+  state.hist.forEach(m=>{ md += `## ${m.role==='user'?'You':'Model'}\n\n${m.content}\n\n---\n\n`; });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([md],{type:'text/markdown'}));
+  a.download = 'openkey-conversation.md';
+  a.click();
+}
+
+/* ---------- eventos ---------- */
+$('connectBtn').onclick = connect;
+$('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') connect(); });
+$('focusKeyBtn').onclick = ()=>{
+  document.body.classList.add('sb-open');
+  $('keyInput').focus();
+};
+$('modelBtn').onclick = e=>{ e.stopPropagation(); $('modelWrap').classList.toggle('open'); if($('modelWrap').classList.contains('open')) $('modelSearch').focus(); };
+$('modelSearch').addEventListener('input', renderModels);
+$('modelSearch').addEventListener('click', e=>e.stopPropagation());
+$('modelPanel').addEventListener('click', e=>e.stopPropagation());
+$('showAll').addEventListener('change', renderModels);
+$('modelList').addEventListener('click', e=>{
+  const it = e.target.closest('.mitem');
+  if(!it) return;
+  state.sel = it.dataset.id;
+  localStorage.setItem('nv_model', state.sel);
+  renderModels(); updateModelUI();
+  $('modelWrap').classList.remove('open');
+});
+document.addEventListener('click', ()=>$('modelWrap').classList.remove('open'));
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $('modelWrap').classList.remove('open'); document.body.classList.remove('sb-open'); }});
+
+$('temp').addEventListener('input', ()=>{ $('tempVal').textContent = (+$('temp').value).toFixed(2); saveSettings(); });
+$('maxTok').addEventListener('change', saveSettings);
+$('sysPrompt').addEventListener('change', saveSettings);
+
+$('sendBtn').onclick = ()=> state.busy ? state.ctrl?.abort() : send();
+$('input').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); if(state.busy) return; send(); }
+});
+function autoGrow(){
+  const t = $('input');
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight, 170) + 'px';
+}
+function updateCount(){
+  const n = $('input').value.length;
+  $('charCount').textContent = n ? n + ' chars' : '';
+}
+$('input').addEventListener('input', ()=>{ autoGrow(); updateCount(); });
+
+$('clearBtn').onclick = clearChat;
+$('exportBtn').onclick = exportChat;
+$('regenBtn').onclick = ()=>{
+  if(state.busy) return;
+  if(state.hist[state.hist.length-1]?.role==='assistant'){
+    state.hist.pop();
+    const msgs = [...$('messages').children].filter(c=>c.classList.contains('msg'));
+    msgs[msgs.length-1]?.remove();
+    stream();
+  }
+};
+$('messages').addEventListener('click', e=>{
+  const cp = e.target.closest('.mcopy');
+  if(cp){
+    const raw = cp.closest('.msg').dataset.raw || '';
+    navigator.clipboard.writeText(raw).then(()=>{ cp.textContent='copied ✓'; setTimeout(()=>cp.textContent='copy',1400); });
+    return;
+  }
+  const cb = e.target.closest('[data-code]');
+  if(cb){
+    const code = cb.closest('.codebox').querySelector('code').textContent;
+    navigator.clipboard.writeText(code).then(()=>{ cb.textContent='copied ✓'; setTimeout(()=>cb.textContent='copy',1400); });
+  }
+});
+document.querySelectorAll('.chip').forEach(ch=>ch.onclick = ()=>{
+
+  $('input').value = ch.childNodes[1].textContent.trim();
+  send();
+});
+
+$('menuBtn').onclick = ()=>document.body.classList.toggle('sb-open');
+$('backdrop').onclick = ()=>document.body.classList.remove('sb-open');
+
+/* ---------- restore settings ---------- */
+(function restore(){
+  if(localStorage.getItem('nv_temp')) $('temp').value = localStorage.getItem('nv_temp');
+  $('tempVal').textContent = (+$('temp').value).toFixed(2);
+  if(localStorage.getItem('nv_maxtok')) $('maxTok').value = localStorage.getItem('nv_maxtok');
+  if(localStorage.getItem('nv_sys')) $('sysPrompt').value = localStorage.getItem('nv_sys');
+  if(state.key) $('keyInput').value = state.key;
+})();
+
+/* ---------- boot ---------- */
+bootLog('[ ok ] interface initialized','lok');
+bootLog('[ ok ] markdown renderer loaded','lok');
+if(state.key){
+  bootLog('[ .. ] saved key found — reconnecting …','lrun');
+  setTimeout(connect, 500);
+}else{
+  const l = document.createElement('div');
+  l.className = 'l caretline';
+  l.textContent = '[ __ ] waiting for API key ';
+  $('bootLog').appendChild(l);
+}
+
+/* ---------- background particles ---------- */
+(function(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = $('fx'), ctx = cv.getContext('2d');
+  let W,H,P=[];
+  function rs(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
+  rs(); addEventListener('resize', rs);
+  for(let i=0;i<70;i++) P.push({
+    x:Math.random()*innerWidth, y:Math.random()*innerHeight,
+    r:.6+Math.random()*1.8, s:.12+Math.random()*.4,
+    a:.15+Math.random()*.5, d:Math.random()*Math.PI*2
+  });
+  (function loop(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of P){
+      p.y -= p.s; p.x += Math.sin(p.y*.01+p.d)*.15;
+      if(p.y<-4){ p.y=H+4; p.x=Math.random()*W; }
+      ctx.fillStyle = `rgba(140,210,60,${p.a*.35})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
+</script>
+</body>
+</html>
