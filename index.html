@@ -371,7 +371,7 @@ header .sp{flex:1}
       <textarea id="sysPrompt" rows="3" style="font:13px/1.5 var(--body);resize:vertical">You are a helpful, concise assistant. Reply in the same language the user writes in.</textarea>
     </section>
 
-    <p class="hint" style="margin-top:auto;padding:4px 2px 0">100% client-side · requests go only to <b style="color:var(--muted)">integrate.api.nvidia.com</b></p>
+    <p class="hint" style="margin-top:auto;padding:4px 2px 0">Runs locally · requests are proxied to <b style="color:var(--muted)">integrate.api.nvidia.com</b> via the built-in server</p>
   </aside>
 
   <!-- ===================== MAIN ===================== -->
@@ -438,9 +438,11 @@ header .sp{flex:1}
 <script>
 /* ============================================================
    OpenKey — multi-model chat for the NVIDIA NIM API
-   endpoint: https://integrate.api.nvidia.com/v1  (OpenAI-compatible)
+   Calls go through the local proxy (server.py) at /api/v1,
+   which forwards to https://integrate.api.nvidia.com/v1
+   (OpenAI-compatible) — this avoids browser CORS blocks.
    ============================================================ */
-const API = 'https://integrate.api.nvidia.com/v1';
+const API = '/api/v1';
 const $ = id => document.getElementById(id);
 
 const NO_TEXT = /(embed|rerank|rank[-.]|retriev|sdxl|diffus|imagen|flux|image|photo|paint|whisper|speech|tts|audio|asr\b|video|motion|cosmos|ocr|segme|depth|pose|avatar|face|upscale|inpaint|vision|vlm|llava|pixtral|moondream|paligemma|internvl|got-|music|midi|point|robotic|gr00t|isaac)/i;
@@ -556,7 +558,7 @@ async function connect(){
   if(!key){ setStatus('err','enter a key'); $('keyInput').focus(); return; }
   if(!/^nvapi-/.test(key)) bootLog('[ !! ] key does not start with "nvapi-" — trying anyway','lrun');
   setStatus('busy','authenticating…');
-  bootLog('[ .. ] authenticating with integrate.api.nvidia.com …','lrun');
+  bootLog('[ .. ] authenticating via local proxy → integrate.api.nvidia.com …','lrun');
   try{
     const res = await fetch(API + '/models', { headers:{ 'Authorization':'Bearer '+key, 'Accept':'application/json' }});
     if(res.status===401||res.status===403){ throw new Error('key rejected (401) — check that it is complete'); }
