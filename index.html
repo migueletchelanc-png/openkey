@@ -320,6 +320,14 @@ header .sp{flex:1}
   #composer{padding:10px 10px calc(10px + env(safe-area-inset-bottom))}
   #modelList{max-height:44vh}
   .codebox pre code{font-size:12px}
+  /* extra thumb-friendly tweaks */
+  .crow .khint{display:none}
+  .send{width:48px;height:42px}
+  #modelPanel{position:fixed;left:12px;right:12px;top:auto;z-index:60}
+  .mitem{padding:11px 9px}
+  .chip{padding:12px 14px;font-size:14px}
+  #boot .big{font-size:clamp(30px,9vw,44px)}
+  .mcopy{opacity:1}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
@@ -454,12 +462,14 @@ header .sp{flex:1}
 <script>
 /* ============================================================
    OpenKey — multi-model chat for the NVIDIA NIM API
-   Local dev (server.py): calls go through the /api/v1 proxy.
-   Hosted (e.g. GitHub Pages): calls go directly to NVIDIA —
-   the NIM API allows CORS from browser origins.
+   Endpoint priority:
+     1. localhost        → /api/v1 (server.py proxy)
+     2. PROXY_URL set    → your Cloudflare Worker (reliable, CORS-safe)
+     3. otherwise        → direct call to integrate.api.nvidia.com
    ============================================================ */
+const PROXY_URL = 'https://openkey.migueletchelanc.workers.dev/'; // ← paste your worker URL here, e.g. 'https://openkey-proxy.YOU.workers.dev/v1'
 const IS_LOCAL = ['localhost','127.0.0.1','::1'].includes(location.hostname);
-const API = IS_LOCAL ? '/api/v1' : 'https://integrate.api.nvidia.com/v1';
+const API = IS_LOCAL ? '/api/v1' : (PROXY_URL || 'https://integrate.api.nvidia.com/v1');
 const $ = id => document.getElementById(id);
 
 const NO_TEXT = /(embed|rerank|rank[-.]|retriev|sdxl|diffus|imagen|flux|image|photo|paint|whisper|speech|tts|audio|asr\b|video|motion|cosmos|ocr|segme|depth|pose|avatar|face|upscale|inpaint|vision|vlm|llava|pixtral|moondream|paligemma|internvl|got-|music|midi|point|robotic|gr00t|isaac)/i;
@@ -576,7 +586,8 @@ async function connect(){
   if(!/^nvapi-/.test(key)) bootLog('[ !! ] key does not start with "nvapi-" — trying anyway','lrun');
   setStatus('busy','authenticating…');
   bootLog(IS_LOCAL ? '[ .. ] authenticating via local proxy → integrate.api.nvidia.com …'
-                   : '[ .. ] authenticating with integrate.api.nvidia.com …','lrun');
+        : PROXY_URL ? '[ .. ] authenticating via worker proxy → integrate.api.nvidia.com …'
+                    : '[ .. ] authenticating with integrate.api.nvidia.com …','lrun');
   try{
     const res = await fetch(API + '/models', { headers:{ 'Authorization':'Bearer '+key, 'Accept':'application/json' }});
     if(res.status===401||res.status===403){ throw new Error('key rejected (401) — check that it is complete'); }
@@ -603,7 +614,7 @@ async function connect(){
     if(err instanceof TypeError){
       bootLog('[ !! ] network/CORS error — the request never reached NVIDIA.','lerr');
       bootLog(IS_LOCAL ? '     tip: make sure server.py is running (python server.py).'
-                       : '     tip: check your connection, or disable strict ad/tracker blockers for this page.','lerr');
+                       : '     tip: set PROXY_URL in index.html to your Cloudflare Worker for a reliable connection.','lerr');
     }else{
       bootLog('[ !! ] ' + err.message, 'lerr');
     }
